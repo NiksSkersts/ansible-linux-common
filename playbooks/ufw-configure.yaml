@@ -1,0 +1,52 @@
+---
+- name: Configure UFW
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Install UFW
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # Blasting UFW on top of old rules will make a mess.
+    # Reset and apply the latest rules on top.
+    # Reset disables firewall. It's safe (in a way).
+    - name: Reset UFW to default settings
+      community.general.ufw:
+        state: reset
+
+    - name: Configure allowed incoming services
+      community.general.ufw:
+        rule: "{{ item.rule }}"
+        direction: "{{ item.direction }}"
+        interface: "{{ item.interface | default(omit) }}"
+        proto: "{{ item.protocol }}"
+        to_port: "{{ item.port }}"
+        comment: "{{ item.comment }}"
+      loop: "{{ config_context[0].firewall_rules }}"
+      loop_control:
+        label: "{{ item.interface | default('all') }}:{{ item.direction }}:{{ item.port }}/{{ item.protocol }}"
+
+    # This is default behavior.
+    - name: Deny incoming traffic by default
+      community.general.ufw:
+        direction: incoming
+        default: deny
+
+    # This is default behavior.
+    - name: Allow outgoing traffic by default
+      community.general.ufw:
+        direction: outgoing
+        default: allow
+
+    - name: Enable UFW logging
+      community.general.ufw:
+        logging: low
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
