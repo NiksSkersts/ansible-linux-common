@@ -18,6 +18,7 @@
         DEBIAN_FRONTEND: noninteractive
 
     - name: Check whether a reboot is required
+      when: "{{ check_reboot | default(true) }}"
       ansible.builtin.stat:
         path: /var/run/reboot-required
         get_checksum: false
