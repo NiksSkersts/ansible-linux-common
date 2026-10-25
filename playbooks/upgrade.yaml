@@ -18,13 +18,14 @@
         DEBIAN_FRONTEND: noninteractive
 
     - name: Check whether a reboot is required
-      when: "{{ check_reboot | default(true) }}"
+      tags: [ check_reboot ]
       ansible.builtin.stat:
         path: /var/run/reboot-required
         get_checksum: false
       register: reboot_required
 
     - name: Reboot the machine when required
+      tags: [ check_reboot ]
       ansible.builtin.reboot:
         msg: Reboot initiated by Ansible
         reboot_timeout: 600
