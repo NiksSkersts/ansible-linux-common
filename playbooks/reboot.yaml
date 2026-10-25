@@ -1,0 +1,11 @@
+---
+- name: Reboot system
+  hosts: all
+  tasks:
+
+    - name: Reboot the machine
+      become: true
+      ansible.builtin.reboot:
+        msg: "Reboot initiated by Ansible"
+        reboot_timeout: 600
+        test_command: whoami
