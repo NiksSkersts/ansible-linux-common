@@ -1,0 +1,129 @@
+---
+- name: Remove unmanaged chrony source files
+  hosts: all
+  gather_facts: false
+  become: true
+
+  vars:
+    ntp_servers: "{{ config_context[0].ntp_servers }}"
+
+  handlers:
+
+    - name: restart-systemd-timesyncd
+      become: true
+      systemd:
+        name: systemd-timesyncd
+        state: restarted
+        enabled: yes
+
+    - name: restart-chrony
+      become: true
+      ansible.builtin.systemd_service:
+        name: "{{ ntp_service }}"
+        state: restarted
+        enabled: true
+
+  pre-tasks:
+
+    - name: Find unmanaged chrony source files
+      ansible.builtin.find:
+        paths: /etc/chrony/sources.d
+        patterns: '*.sources'
+        excludes: '90-ntp-servers.sources'
+        file_type: file
+        hidden: true
+        recurse: false
+      register: unmanaged_chrony_sources
+
+    - name: Remove unmanaged chrony source files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ unmanaged_chrony_sources.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+
+  tasks:
+
+    - name: Detect installed and active NTP service
+      ansible.builtin.service_facts:
+
+    - name: Select NTP service
+      ansible.builtin.set_fact:
+        ntp_service: >-
+          {{
+            'chronyd'
+            if ansible_facts.services.get('chronyd.service', {}).get('state') == 'running'
+            else 'chrony'
+            if ansible_facts.services.get('chrony.service', {}).get('state') == 'running'
+            else 'systemd-timesyncd'
+            if ansible_facts.services.get('systemd-timesyncd.service', {}).get('state') == 'running'
+            else 'chronyd'
+            if 'chronyd.service' in ansible_facts.services
+            else 'chrony'
+            if 'chrony.service' in ansible_facts.services
+            else 'systemd-timesyncd'
+            if 'systemd-timesyncd.service' in ansible_facts.services
+            else 'none'
+          }}
+
+    - name: Configure detected NTP service
+      block:
+        - name: Configure chrony sources
+          when: ntp_service in ['chrony', 'chronyd']
+          notify: restart-chrony
+          ansible.builtin.copy:
+            content: |
+              {% for server in ntp_servers %}
+              server {{ server }} iburst
+              {% endfor %}
+            dest: /etc/chrony/sources.d/90-ntp-servers.sources
+
+        - name: Configure systemd-timesyncd servers
+          when: ntp_service == 'systemd-timesyncd'
+          notify: restart-systemd-timesyncd
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/timesyncd.conf
+            regexp: '^#?NTP='
+            line: "NTP={{ ntp_servers | join(' ') }}"
+            create: true
+
+      when: ntp_service != 'none'
+
+    - name: Configure systemd-timesyncd as NTP fallback
+      when: ntp_service == 'none'
+      block:
+        - name: Install systemd-timesyncd
+          ansible.builtin.apt:
+            name: systemd-timesyncd
+            state: present
+            update_cache: true
+
+        - name: Configure systemd-timesyncd NTP servers
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/timesyncd.conf
+            regexp: '^#?NTP='
+            line: "NTP={{ ntp_servers | join(' ') }}"
+            create: true
+          notify: restart-systemd-timesyncd
+
+        - name: Enable and start systemd-timesyncd
+          ansible.builtin.systemd_service:
+            name: systemd-timesyncd
+            enabled: true
+            state: started
+
+    - name: Ensure ntpsec-ntpdate is installed
+      become: true
+      apt:
+        name:
+          - ntpsec-ntpdate
+        state: present
+        update_cache: yes
+
+    - name: Query each NTP server using ntpdate
+      ansible.builtin.command: ntpdate -q {{ item }}
+      loop: "{{ ntp_servers }}"
+      register: ntp_query
+      changed_when: false
+      failed_when: ntp_query.rc != 0
