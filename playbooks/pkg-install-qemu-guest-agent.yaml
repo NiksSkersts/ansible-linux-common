@@ -1,0 +1,21 @@
+---
+- name: Install qemu-guest-agent on Debian
+  gather_facts: no
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Ensure apt cache is updated
+      apt:
+        update_cache: yes
+
+    - name: Install qemu-guest-agent
+      apt:
+        name: qemu-guest-agent
+        state: present
+
+    - name: Ensure qemu-guest-agent service is enabled and running
+      service:
+        name: qemu-guest-agent
+        state: started
+        enabled: yes
