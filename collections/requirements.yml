@@ -1,0 +1,24 @@
+---
+
+collections:
+
+  - name: zabbix.zabbix
+
+  - name: ansible.posix
+
+  - name: ansible.netcommon
+
+  - name: ansible.utils
+
+  - name: ansible.snmp
+
+  - name: netbox.netbox
+### ANSIBLE COMMUNITY
+
+  - name: community.proxmox
+
+  - name: community.general
+
+  - name: community.network
+
+  - name: community.mysql

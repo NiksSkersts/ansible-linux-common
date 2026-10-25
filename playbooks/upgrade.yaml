@@ -1,0 +1,31 @@
+---
+- name: Upgrade system
+  # Currently Debian only
+  hosts: all
+  become: true
+  gather_facts: false
+  strategy: free
+  tags:
+    - os_upgrade
+
+  tasks:
+    - name: Update the APT cache and upgrade installed packages
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: "{{ apt_cache_valid_time | default(3600) | int }}"
+        upgrade: "{{ upgrade_type | default('safe') }}"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Check whether a reboot is required
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+        get_checksum: false
+      register: reboot_required
+
+    - name: Reboot the machine when required
+      ansible.builtin.reboot:
+        msg: Reboot initiated by Ansible
+        reboot_timeout: 600
+        test_command: whoami
+      when: reboot_required.stat.exists
